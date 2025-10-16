@@ -8,6 +8,16 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 TPL = os.path.join(BASE, "plantillas", "acta_garantia.docx")
 OUT = os.path.join(BASE, "docs")
 
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+import os
+from docxtpl import DocxTemplate
+import modelo
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+TPL = os.path.join(BASE, "plantillas", "acta_garantia.docx")
+OUT = os.path.join(BASE, "docs")
+
 def generar_acta_para_placa(placa: str, creado_por: str = None, obs: str = None):
     """
     Genera un acta de garantía en formato DOCX (y opcionalmente PDF) 
@@ -28,12 +38,17 @@ def generar_acta_para_placa(placa: str, creado_por: str = None, obs: str = None)
     
     placa, fe, fs, nom, ape, ced, tel, dirc, marca, motor = r
 
+    # Calcular fecha de elaboración (hoy) y vigencia (3 años después)
+    fecha_elaboracion = datetime.now()
+    fecha_vigencia = fecha_elaboracion + relativedelta(years=3)
+
     # Construir contexto para la plantilla
     ctx = {
         "vehiculo_placa": placa,
         "fecha_entrada": fe or "",
         "fecha_salida": fs or "",
-        "fecha_elaboracion": datetime.now().strftime("%d/%m/%Y"),
+        "fecha_elaboracion": fecha_elaboracion.strftime("%d/%m/%Y"),
+        "vigencia_garantia": fecha_vigencia.strftime("%d/%m/%Y"),
         "cliente_nombre": f"{nom or ''} {ape or ''}".strip(),
         "cliente_cedula": ced or "",
         "cliente_telefono": tel or "",
@@ -71,7 +86,7 @@ def generar_acta_para_placa(placa: str, creado_por: str = None, obs: str = None)
     # Registrar acta en base de datos
     acta_id = modelo.crear_acta_garantia(
         placa=placa,
-        fecha_elaboracion=datetime.now().strftime("%Y-%m-%d"),
+        fecha_elaboracion=fecha_elaboracion.strftime("%Y-%m-%d"),
         ruta_docx=docx_path,
         ruta_pdf=pdf_path,
         obs=obs,

@@ -2,18 +2,25 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
+from modelo import obtener_vehiculo_por_placa
+from modelo import obtener_vehiculo_por_placa
+from imprimir_cotizacion import generar_cotizacion_para_placa
 import modelo
 
 
 class VistaPrincipal:
     def __init__(self, root):
         self.root = root
-        # …
+        # 1. Inicializa el mapa de texto→ID
+        self.map_texto_a_id = {}
+
         modelo.initialize_db()
         self.crear_interfaz()  # esto define propietario_combo
+        # 2. Rellena propietarios antes de cualquier operación que los use
+        self.cargar_propietarios()
+
         self.cargar_usuarios()  # usa tree_usuarios
         self.cargar_vehiculos()  # usa tree_vehiculos
-        self.cargar_propietarios()  # ahora propietario_combo ya existe
 
     def cargar_datos_iniciales(self):
         self.cargar_usuarios()
@@ -54,31 +61,39 @@ class VistaPrincipal:
         main.pack(fill="both", expand=True, padx=10, pady=10)
         left = ttk.LabelFrame(main, text="Datos del Usuario", padding=15)
         left.pack(side="left", fill="y", padx=(0, 10))
+
+        # Campos de entrada
         ttk.Label(left, text="Cédula:", font=("Arial", 10, "bold")).grid(
             row=0, column=0, sticky="w", pady=5
         )
         self.cedula_entry = ttk.Entry(left)
         self.cedula_entry.grid(row=1, column=0, pady=(0, 10))
+
         ttk.Label(left, text="Nombre:", font=("Arial", 10, "bold")).grid(
             row=2, column=0, sticky="w", pady=5
         )
         self.nombre_entry = ttk.Entry(left)
         self.nombre_entry.grid(row=3, column=0, pady=(0, 10))
+
         ttk.Label(left, text="Apellido:", font=("Arial", 10, "bold")).grid(
             row=4, column=0, sticky="w", pady=5
         )
         self.apellido_entry = ttk.Entry(left)
         self.apellido_entry.grid(row=5, column=0, pady=(0, 10))
+
         ttk.Label(left, text="Teléfono:", font=("Arial", 10, "bold")).grid(
             row=6, column=0, sticky="w", pady=5
         )
         self.telefono_entry = ttk.Entry(left)
         self.telefono_entry.grid(row=7, column=0, pady=(0, 10))
+
         ttk.Label(left, text="Dirección:", font=("Arial", 10, "bold")).grid(
             row=8, column=0, sticky="w", pady=5
         )
         self.dir_entry = ttk.Entry(left)
         self.dir_entry.grid(row=9, column=0, pady=(0, 15))
+
+        # Botones de acción
         btns = ttk.Frame(left)
         btns.grid(row=10, column=0, pady=10)
         ttk.Button(btns, text="💾 Guardar", command=self.guardar_usuario).pack(pady=2)
@@ -87,6 +102,8 @@ class VistaPrincipal:
         )
         ttk.Button(btns, text="🗑️ Eliminar", command=self.eliminar_usuario).pack(pady=2)
         ttk.Button(btns, text="🆕 Nuevo", command=self.limpiar_usuario).pack(pady=2)
+
+        # Contenedor de lista
         right = ttk.LabelFrame(main, text="Lista de Usuarios", padding=10)
         right.pack(side="right", fill="both", expand=True)
         cols_usr = ("Cédula", "Nombre", "Apellido", "Teléfono", "Dirección")
@@ -102,35 +119,11 @@ class VistaPrincipal:
         sb.pack(side="right", fill="y")
         self.tree_usuarios.bind("<<TreeviewSelect>>", self.seleccionar_usuario)
 
-        self.usr_pagina = 0
-        self.usr_page_size = 30
+        # Configurar paginación
+        self.configurar_paginacion_usuarios(left)
 
-        def recargar_usuarios():
-            offset = self.usr_pagina * self.usr_page_size
-            rows = modelo.listar_usuarios_paginados(
-                limit=self.usr_page_size, offset=offset
-            )
-            self.tree_usuarios.delete(*self.tree_usuarios.get_children())
-            for usr in rows:
-                self.tree_usuarios.insert("", "end", iid=str(usr[0]), values=usr[1:])
-            total = modelo.contar_usuarios()
-            desde = offset + 1 if total > 0 else 0
-            hasta = min(offset + self.usr_page_size, total)
-            usr_label.config(text=f"{desde}-{hasta} de {total}")
-
-        # Etiqueta de página y botones
-        usr_label = ttk.Label(left, text="")
-        usr_label.grid(row=11, column=0, pady=(0, 10))
-        nav = ttk.Frame(left)
-        nav.grid(row=12, column=0)
-        ttk.Button(
-            nav, text="◀", command=lambda: (self._usr_anterior(), recargar_usuarios())
-        ).pack(side="left")
-        ttk.Button(
-            nav, text="▶", command=lambda: (self._usr_siguiente(), recargar_usuarios())
-        ).pack(side="left")
-
-        recargar_usuarios()
+        # Carga inicial
+        self.cargar_usuarios()
 
     def crear_pestaña_vehiculos(self):
         # Contenedor principal
@@ -171,33 +164,25 @@ class VistaPrincipal:
         self.fecha_salida_entry.grid(row=9, column=0, pady=(0, 15))
         self.fecha_salida_entry.delete(0, tk.END)
 
-            # Combobox de propietarios con mapeo interno
-        ttk.Label(left, text="Propietario:", font=("Arial",10,"bold")).grid(
+        # Combobox de propietarios con mapeo interno
+        ttk.Label(left, text="Propietario:", font=("Arial", 10, "bold")).grid(
             row=10, column=0, sticky="w", pady=5
         )
         self.propietario_combo = ttk.Combobox(left, state="readonly")
-        
+
         usuarios = modelo.listar_usuarios()
         vals = [f"{u[1]} – {u[2]} {u[3]}".strip() for u in usuarios]
         self.propietario_combo["values"] = vals
         if vals:
             self.propietario_combo.current(0)
-                
-                
-        
-        self.propietario_combo.grid(row=11, column=0, pady=(0,15))
 
-
-
-
-
-
+        self.propietario_combo.grid(row=11, column=0, pady=(0, 15))
 
         # Construye los mapas y llena el combobox inmediatamente
         usuarios = modelo.listar_usuarios()
-        self.map_cedula_a_id     = { str(u[1]): u[0] for u in usuarios }
-        self.map_cedula_a_nombre = { str(u[1]): u[2] for u in usuarios }
-        vals = [ f"{u[1]} - {u[2]}" for u in usuarios ]
+        self.map_cedula_a_id = {str(u[1]): u[0] for u in usuarios}
+        self.map_cedula_a_nombre = {str(u[1]): u[2] for u in usuarios}
+        vals = [f"{u[1]} - {u[2]}" for u in usuarios]
         self.propietario_combo["values"] = vals
 
         # Botones de acción
@@ -379,8 +364,20 @@ class VistaPrincipal:
             messagebox.showinfo("Resultado", "No se encontraron placas que coincidan")
 
     # ===== COTIZACIÓN =====
+    
+    
+    # modelo.py
+
+# … tu configuración de conexión …
+
+  
+    
+    
+    
     def abrir_cotizacion(self):
         placa = self.placa_entry.get().strip().upper()
+        fecha = self.fecha_entry.get_date().strftime("%Y-%m-%d")
+        cot_id = None
         if not placa:
             messagebox.showwarning(
                 "Aviso", "Ingrese o seleccione una placa antes de crear la cotización"
@@ -421,31 +418,46 @@ class VistaPrincipal:
 
         def add_item():
             try:
-                art = art_entry.get().strip()
                 desc = desc_entry.get().strip()
-                cant = self._parse_money(cant_entry.get())
-                pu = self._parse_money(pu_entry.get())
+                cant_str = cant_entry.get().strip()
+                pu_str = pu_entry.get().strip()
+
+                # Validar que los campos obligatorios no estén vacíos
+                if not desc or not cant_str or not pu_str:
+                    messagebox.showwarning("Campos requeridos", 
+                                        "La descripción, cantidad y P/U son obligatorios.")
+                    return # No insertar la fila si faltan datos
+
+                # Si los campos tienen datos, procede a convertir y calcular
+                art = art_entry.get().strip()
+                cant = self._parse_money(cant_str)
+                pu = self._parse_money(pu_str)
                 total = cant * pu
-                if not desc:
-                    raise ValueError("Descripción requerida")
+
+                # Insertar la fila solo si todos los datos son válidos
                 win.tree.insert(
-                    "",
-                    "end",
+                    "", "end",
                     values=(
                         art,
                         desc,
                         f"{cant:g}",
                         self._fmt_money(pu),
                         self._fmt_money(total),
-                    ),
+                    )
                 )
+
+                # Limpiar campos y recalcular
                 art_entry.delete(0, tk.END)
                 desc_entry.delete(0, tk.END)
                 cant_entry.delete(0, tk.END)
                 pu_entry.delete(0, tk.END)
+                art_entry.focus()
                 _recalc_total()
+
+            except ValueError as ve:
+                messagebox.showerror("Error de Formato", f"Valor numérico no válido: {ve}")
             except Exception as e:
-                messagebox.showerror("Error", f"Dato inválido: {e}")
+                messagebox.showerror("Error", f"No se pudo agregar el ítem: {e}")
 
         ttk.Button(form, text="Agregar", command=add_item).grid(row=1, column=4, padx=6)
         pu_entry.bind("<Return>", lambda e: add_item())
@@ -497,48 +509,152 @@ class VistaPrincipal:
         bottom = ttk.Frame(cont)
         bottom.pack(fill="x", pady=(10, 0))
 
+        # En vista.py, dentro de tu clase, reemplaza la función existente
+
         def guardar_persistente():
+            nonlocal cot_id
             try:
                 items = []
                 total = 0.0
+
+                # 1. Recolectamos los datos del Treeview
                 for iid in win.tree.get_children():
-                    art, desc, cant_s, pu_s, tot_s = win.tree.item(iid)["values"]
+                    valores = win.tree.item(iid, 'values')
+                    if not valores or len(valores) < 5:
+                        continue
+
+                    art, desc, cant_s, pu_s, tot_s = valores
+                    
                     cant = self._parse_money(cant_s)
                     pu = self._parse_money(pu_s)
                     tot = self._parse_money(tot_s)
-                    items.append(
-                        {
-                            "articulo": str(art) or None,
-                            "descripcion": str(desc),
-                            "cantidad": cant,
-                            "precio_unit": pu,
-                            "total": tot,
-                        }
-                    )
+                    
+                    items.append({
+                        "articulo": art or None, "descripcion": desc,
+                        "cantidad": cant, "precio_unit": pu, "total": tot,
+                    })
                     total += tot
+
                 if not items:
-                    messagebox.showwarning("Aviso", "Agregue al menos un ítem")
+                    messagebox.showwarning("Aviso", "No hay ítems válidos para guardar.")
                     return
+
                 placa = self.placa_entry.get().strip().upper()
                 if not placa:
-                    messagebox.showwarning(
-                        "Aviso", "Ingrese/seleccione una placa válida"
-                    )
+                    messagebox.showwarning("Aviso", "Ingrese/seleccione una placa válida")
                     return
-                fecha = self.fecha_entry.get_date().strftime("%Y-%m-%d")
-                cot_id = modelo.guardar_cotizacion(placa, fecha, round(total, 2), items)
-                messagebox.showinfo(
-                    "Cotización",
-                    f"Cotización guardada (ID {cot_id}) para placa {placa}",
-                )
-                win.destroy()
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo guardar: {e}")
 
-        ttk.Button(bottom, text="Guardar", command=guardar_persistente).pack(
-            side="left"
-        )
+                # --- LÍNEAS DE DEPURACIÓN ---
+                # Antes de llamar a la función, vamos a imprimir lo que le vamos a enviar.
+                print("--- DEBUG ANTES DE GUARDAR ---")
+                print(f"Placa: {placa} (Tipo: {type(placa)})")
+                print(f"Total: {round(total, 2)} (Tipo: {type(round(total, 2))})")
+                print(f"Items: {items} (Tipo: {type(items)}, Longitud: {len(items)})")
+                print("-------------------------------")
+                
+                
+              
+                
+                # --- LLAMADA CORRECTA A LA FUNCIÓN DEL MODELO ---
+                # Verificamos que se pasan los 3 argumentos: placa, total, items.
+                cot_id, fecha_generada = modelo.guardar_cotizacion(
+                    placa, 
+                    round(total, 2), 
+                    items
+                )
+
+                # Si llegamos aquí, el guardado en la DB fue exitoso. Ahora generamos el DOCX.
+                from datetime import datetime
+                from imprimir_cotizacion import generar_cotizacion_para_placa
+                
+                fecha_obj = datetime.strptime(fecha_generada, '%Y-%m-%d')
+                fecha_para_doc = fecha_obj.strftime('%d-%m-%Y')
+                
+                ruta = generar_cotizacion_para_placa(placa, fecha_para_doc, cot_id)
+
+                messagebox.showinfo("Guardado", f"Cotización ID {cot_id}\nArchivo: {ruta}")
+                win.destroy()
+
+            except Exception as e:
+                import traceback
+                print("\n--- OCURRIÓ UN ERROR DETALLADO ---")
+                traceback.print_exc()
+                print("---------------------------------\n")
+                messagebox.showerror("Error", f"No se pudo guardar:\n{e}")
+
+
+
+
+
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        ttk.Button(bottom, text="Guardar", command=guardar_persistente).pack(side="left")
+
+            # Botón Imprimir
+        def imprimir_cotizacion():
+                try:
+                    from imprimir_cotizacion import generar_cotizacion_para_placa
+                    ruta = generar_cotizacion_para_placa(
+                        placa=placa,
+                        fecha=fecha,
+                        cot_id=cot_id,
+                        output_dir=r"C:\Users\Admin\Desktop\AppLaboratorioCarlos\docs\COTIZACIONES"
+                    )
+                    os.startfile(ruta, "print")
+                except Exception as e:
+                    messagebox.showerror("Imprimir", f"No se pudo imprimir:\n{e}")
+
+        ttk.Button(bottom, text="🖨 Imprimir", command=imprimir_cotizacion).pack(side="left", padx=6)
+
+            # Botón Cerrar
         ttk.Button(bottom, text="Cerrar", command=win.destroy).pack(side="right")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # ===== HISTORIAL COTIZACIONES =====
     def abrir_historial_cotizaciones(self):
@@ -594,24 +710,21 @@ class VistaPrincipal:
         ttk.Button(actions, text="Recargar", command=recargar).pack(side="left", padx=6)
         ttk.Button(actions, text="Cerrar", command=win.destroy).pack(side="right")
 
-
-
     # ===== ACTAS GARANTÍA =====
     def abrir_acta(self):
         placa = self.placa_entry.get().strip().upper()
         if not placa:
             messagebox.showwarning("Aviso", "Seleccione una placa")
             return
-        if not messagebox.askyesno("Confirmar", f"Generar Acta de garantía para {placa}?"):
+        if not messagebox.askyesno(
+            "Confirmar", f"Generar Acta de garantía para {placa}?"
+        ):
             return
         try:
             from imprimir_acta import generar_acta_para_placa
 
             # Llamada sin 'fecha_elaboracion'
-            acta_id, docx, pdf = generar_acta_para_placa(
-                placa,
-                creado_por="operador"
-            )
+            acta_id, docx, pdf = generar_acta_para_placa(placa, creado_por="operador")
             texto = f"Acta ID {acta_id} creada.\nDOCX: {docx}"
             if pdf:
                 texto += f"\nPDF: {pdf}"
@@ -697,6 +810,32 @@ class VistaPrincipal:
         self.dir_entry.delete(0, tk.END)
         self.dir_entry.insert(0, dire or "")
 
+    def configurar_paginacion_usuarios(self, parent):
+        # Inicializa variables
+        self.usr_pagina = 0
+        self.usr_page_size = 30
+
+        # Etiqueta de rango
+        self.usr_label = ttk.Label(parent, text="")
+        self.usr_label.grid(row=11, column=0, pady=(0, 10))
+
+        # Botones ◀ ▶
+        nav = ttk.Frame(parent)
+        nav.grid(row=12, column=0)
+        ttk.Button(nav, text="◀", command=self._usr_anterior).pack(side="left")
+        ttk.Button(nav, text="▶", command=self._usr_siguiente).pack(side="left")
+
+    def _usr_anterior(self):
+        if self.usr_pagina > 0:
+            self.usr_pagina -= 1
+            self.cargar_usuarios()
+
+    def _usr_siguiente(self):
+        total = modelo.contar_usuarios()
+        if (self.usr_pagina + 1) * self.usr_page_size < total:
+            self.usr_pagina += 1
+            self.cargar_usuarios()
+
     def guardar_usuario(self):
         try:
             ced = int(self.cedula_entry.get().strip())
@@ -754,10 +893,18 @@ class VistaPrincipal:
         self.dir_entry.delete(0, tk.END)
 
     def cargar_usuarios(self):
-        for i in self.tree_usuarios.get_children():
-            self.tree_usuarios.delete(i)
-        for usr in modelo.listar_usuarios():
+        # Calcula offset y obtiene solo la página actual
+        offset = self.usr_pagina * self.usr_page_size
+        rows = modelo.listar_usuarios_paginados(limit=self.usr_page_size, offset=offset)
+        # Limpia y recarga el Treeview
+        self.tree_usuarios.delete(*self.tree_usuarios.get_children())
+        for usr in rows:
             self.tree_usuarios.insert("", "end", iid=str(usr[0]), values=usr[1:])
+        # Actualiza etiqueta
+        total = modelo.contar_usuarios()
+        desde = offset + 1 if total > 0 else 0
+        hasta = min(offset + self.usr_page_size, total)
+        self.usr_label.config(text=f"{desde}-{hasta} de {total}")
 
     # ===== CRUD VEHÍCULOS =====
     def seleccionar_vehiculo(self, _):
@@ -791,11 +938,8 @@ class VistaPrincipal:
                 messagebox.showwarning("Aviso", "La placa es obligatoria")
                 return
 
-            # Validar existencia previa
-            todos = [
-                row[0] for row in modelo.listar_vehiculos()
-            ]  # lista de placas existentes
-            if placa in todos:
+            existentes = [row[0] for row in modelo.listar_vehiculos()]
+            if placa in existentes:
                 messagebox.showwarning("Aviso", f"La placa {placa} ya existe")
                 return
 
@@ -804,16 +948,22 @@ class VistaPrincipal:
             fe = self.fecha_entry.get_date().strftime("%Y-%m-%d")
             fs_text = self.fecha_salida_entry.get().strip()
             fs = fs_text if fs_text else None
-            uid = None
-            if self.propietario_combo.get().strip():
-                ced = self.propietario_combo.get().split(" - ")[0].strip()
-                uid = self.map_cedula_a_id.get(ced)
 
-            # Inserción única
-            modelo.guardar_vehiculo(placa, motor, marca, fe, fs, uid)
+            sel = self.propietario_combo.get()
+            usuario_id = self.map_texto_a_id.get(sel)
+            if usuario_id is None:
+                messagebox.showwarning("Aviso", "Seleccione un propietario válido")
+                return
+
+            modelo.guardar_vehiculo(
+                placa=placa,
+                motor=motor,
+                marca=marca,
+                fecha_entrada=fe,
+                fecha_salida=fs,
+                usuario_id=usuario_id,
+            )
             messagebox.showinfo("Éxito", "Vehículo guardado")
-
-            # Recarga y limpieza de duplicados en UI
             self.cargar_vehiculos()
             self.placa_original = placa
 
@@ -872,8 +1022,14 @@ class VistaPrincipal:
 
     def cargar_propietarios(self):
         usuarios = modelo.listar_usuarios()
-        vals = [f"{u[1]} - {u[2]}" for u in usuarios]
-        self.consulta_combo["values"] = vals
+        # Reconstruye el mapa texto→ID
+        self.map_texto_a_id = {
+            f"{u[1]} - {u[2]} {u[3]}".strip(): u[0] for u in usuarios
+        }
+        vals = list(self.map_texto_a_id.keys())
+        self.propietario_combo["values"] = vals
+        if vals:
+            self.propietario_combo.current(0)
 
     def limpiar_vehiculo(self):
         self.placa_entry.config(state="normal")

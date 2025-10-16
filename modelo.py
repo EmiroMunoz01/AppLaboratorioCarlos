@@ -1,5 +1,5 @@
 import mysql.connector
-
+from datetime import date
 DB_CONFIG = {
     "host": "localhost",
     "database": "laboratorio_carlos",
@@ -14,7 +14,7 @@ def initialize_db():
     sql_usuario = """
     CREATE TABLE IF NOT EXISTS usuario (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        cedula INT UNIQUE NOT NULL,
+        cedula VARCHAR(20) UNIQUE NOT NULL,
         nombre VARCHAR(50),
         apellido VARCHAR(50),
         telefono VARCHAR(25),
@@ -38,7 +38,7 @@ def initialize_db():
         id INT AUTO_INCREMENT PRIMARY KEY,
         placa VARCHAR(10) NOT NULL,
         fecha DATE NOT NULL,
-        total DECIMAL(12,2) NOT NULL,
+        total BIGINT NOT NULL,
         FOREIGN KEY (placa) REFERENCES vehiculo(placa)
           ON DELETE CASCADE ON UPDATE CASCADE
     );
@@ -49,13 +49,13 @@ def initialize_db():
         cotizacion_id INT NOT NULL,
         articulo VARCHAR(50),
         descripcion VARCHAR(200) NOT NULL,
-        cantidad DECIMAL(12,2) NOT NULL,
-        precio_unit DECIMAL(12,2) NOT NULL,
-        total DECIMAL(12,2) NOT NULL,
+        cantidad BIGINT NOT NULL,
+        precio_unit BIGINT NOT NULL,
+        total BIGINT NOT NULL,
         FOREIGN KEY (cotizacion_id) REFERENCES cotizacion(id)
           ON DELETE CASCADE
     );
-    """
+    """ 
     sql_acta = """
     CREATE TABLE IF NOT EXISTS acta_garantia (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -212,20 +212,41 @@ def listar_vehiculos_por_usuario(uid):
         con.close()
 
 # COTIZACIONES
-def guardar_cotizacion(placa,fecha,total,items):
+def guardar_cotizacion(placa, total, items):  # <-- Asegúrate que la firma es EXACTAMENTE esta.
+    """
+    Guarda una nueva cotización en la base de datos con la fecha actual.
+    Recibe: placa, total e items.
+    Devuelve: el ID de la cotización y la fecha generada.
+    """
+    fecha_actual = date.today().strftime('%Y-%m-%d')
+    
     con = get_connection()
     try:
         with con.cursor() as cur:
-            cur.execute("INSERT INTO cotizacion(placa,fecha,total) VALUES(%s,%s,%s)",(placa,fecha,total))
-            cid=cur.lastrowid
+            # Inserta la cotización principal
+            cur.execute(
+                "INSERT INTO cotizacion(placa, fecha, total) VALUES(%s, %s, %s)",
+                (placa, fecha_actual, total)
+            )
+            cid = cur.lastrowid # Obtenemos el ID de la cotización recién creada
+            
+            # Inserta cada uno de los ítems
             for it in items:
                 cur.execute(
-                    "INSERT INTO cotizacion_item(cotizacion_id,articulo,descripcion,cantidad,precio_unit,total) "
-                    "VALUES(%s,%s,%s,%s,%s,%s)",
-                    (cid,it.get("articulo"),it["descripcion"],it["cantidad"],it["precio_unit"],it["total"])
+                    "INSERT INTO cotizacion_item(cotizacion_id, articulo, descripcion, cantidad, precio_unit, total) "
+                    "VALUES(%s, %s, %s, %s, %s, %s)",
+                    (
+                        cid,
+                        it.get("articulo"),
+                        it.get("descripcion"),
+                        it.get("cantidad"),
+                        it.get("precio_unit"),
+                        it.get("total")
+                    )
                 )
         con.commit()
-        return cid
+        # Devuelve ambos valores para que la vista los pueda usar
+        return cid, fecha_actual
     finally:
         con.close()
 
@@ -362,6 +383,74 @@ def contar_usuarios():
             return cur.fetchone()[0]
     finally:
         con.close()
+
+
+
+
+# En modelo.py
+
+def listar_items_por_cotizacion(cotizacion_id: int) -> list[dict]:
+    """
+    Devuelve una lista de dicts con los ítems asociados a la cotización.
+    Cada dict tiene claves: articulo, descripcion, cantidad, precio_unit, total.
+    """
+    con = get_connection()
+    try:
+        with con.cursor(dictionary=True) as cur:
+            cur.execute(
+                """
+                SELECT articulo, descripcion, cantidad, precio_unit AS precio_unit, total
+                FROM cotizacion_item
+                WHERE cotizacion_id = %s
+                ORDER BY id
+                """,
+                (cotizacion_id,)
+            )
+            return cur.fetchall()
+    finally:
+        con.close()
+
+
+
+
+
+def obtener_vehiculo_por_placa(placa: str) -> dict:
+    """
+    Devuelve un dict con los datos del vehículo y del usuario asociado.
+    Lanza ValueError si no existe.
+    """
+    con = get_connection()
+    try:
+        with con.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    v.placa,
+                    v.motor,
+                    v.marca,
+                    DATE_FORMAT(v.fecha_entrada, '%Y-%m-%d')    AS fecha_entrada,
+                    DATE_FORMAT(v.fecha_salida, '%Y-%m-%d')     AS fecha_salida,
+                    u.id        AS usuario_id,
+                    u.cedula,
+                    u.nombre,
+                    u.apellido,
+                    u.telefono AS celular
+                FROM vehiculo v
+                JOIN usuario u ON v.usuario_id = u.id
+                WHERE v.placa = %s
+                """,
+                (placa,)
+            )
+            fila = cursor.fetchone()
+    finally:
+        con.close()
+
+    if not fila:
+        raise ValueError(f"No existe vehículo con placa {placa}")
+
+    return fila
+
+
 
 def listar_usuarios_paginados(limit=30, offset=0):
     con = get_connection()

@@ -1,4 +1,5 @@
 import os
+from dateutil.relativedelta import relativedelta
 from datetime import datetime
 from docxtpl import DocxTemplate
 import modelo
@@ -14,6 +15,10 @@ def generar_acta_para_placa(placa: str, creado_por: str = None, obs: str = None)
         raise ValueError("Vehículo no encontrado")
     placa, fe, fs, nom, ape, ced, tel, dirc, marca, motor = r
 
+    # Aquí insertas el cálculo de fechas:
+    fecha_elaboracion = datetime.now()
+    fecha_vigencia = fecha_elaboracion + relativedelta(years=3)
+
     ctx = {
         "vehiculo_placa": placa,
         "fecha_entrada": fe or "",
@@ -28,6 +33,8 @@ def generar_acta_para_placa(placa: str, creado_por: str = None, obs: str = None)
         "empresa_nombre": "LABORATORIO SUR DIESEL PITALITO",
         "empresa_nit": "1083925113-7",
         "empresa_direccion": "Calle 4 #14-52, Villa Matilde",
+        "fecha_elaboracion": fecha_elaboracion.strftime("%d/%m/%Y"),
+        "vigencia_garantia": fecha_vigencia.strftime("%d/%m/%Y"),
     }
 
     os.makedirs(OUT, exist_ok=True)
