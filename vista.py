@@ -2,12 +2,16 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
+from ScrollableFrame import ScrollableFrame
 from modelo import obtener_vehiculo_por_placa
 from modelo import obtener_vehiculo_por_placa
 from imprimir_cotizacion import generar_cotizacion_para_placa
 import modelo
 
 
+LEFT_WIDTH = 160      # 360–400 ideal para 1200px
+LEFT_HEIGHT = 540     # 520–560 según te guste
+GAP_X = 10
 class VistaPrincipal:
     def __init__(self, root):
         self.root = root
@@ -132,6 +136,34 @@ class VistaPrincipal:
         left = ttk.LabelFrame(main, text="Datos del Vehículo", padding=15)
         left.pack(side="left", fill="y", padx=(0, 10))
 
+
+
+
+
+
+        # ===== Columna izquierda =====
+        left_box = ttk.LabelFrame(main, text="Datos del Vehículo", padding=(8,8))
+        left_box.pack(side="left", fill="y", padx=(0, GAP_X))
+
+        # Scrollable dentro del label de la izquierda
+        scroll = ScrollableFrame(left_box, width=LEFT_WIDTH)
+        scroll.pack(fill="y", expand=False)
+
+        # Tamaño visible del área desplazable
+        scroll.canvas.configure(width=LEFT_WIDTH, height=LEFT_HEIGHT, highlightthickness=0, borderwidth=0)
+
+        # ESTE es el padre real de tus widgets
+        left = scroll.content
+        left.grid_columnconfigure(0, weight=1)
+
+
+
+
+
+
+
+
+
         # Campos de entrada
         ttk.Label(left, text="Placa:", font=("Arial", 10, "bold")).grid(
             row=0, column=0, sticky="w", pady=5
@@ -244,6 +276,31 @@ class VistaPrincipal:
 
         # Carga inicial de datos
         self.cargar_vehiculos()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def crear_pestaña_consultas(self):
         # Contenedor principal
@@ -387,7 +444,7 @@ class VistaPrincipal:
         win.title(f"Cotización - {placa}")
         win.transient(self.root)
         win.grab_set()
-        win.geometry("920x520")
+        win.geometry("1200x520")
         cont = ttk.Frame(win, padding=10)
         cont.pack(fill="both", expand=True)
         top = ttk.Frame(cont)
@@ -494,7 +551,7 @@ class VistaPrincipal:
         ttk.Label(
             totals,
             textvariable=total_var,
-            width=12,
+            width=25,
             anchor="e",
             font=("Arial", 10, "bold"),
         ).pack(side="right")
@@ -617,7 +674,7 @@ class VistaPrincipal:
                 except Exception as e:
                     messagebox.showerror("Imprimir", f"No se pudo imprimir:\n{e}")
 
-        ttk.Button(bottom, text="🖨 Imprimir", command=imprimir_cotizacion).pack(side="left", padx=6)
+        
 
             # Botón Cerrar
         ttk.Button(bottom, text="Cerrar", command=win.destroy).pack(side="right")
